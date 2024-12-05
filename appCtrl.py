@@ -45,11 +45,14 @@ OverCharging = False
 PVOptimized = False
 
 Capacities=6.00*60*60
-BatterDecayFactor=1.0
-BatterDecayFactor=1.0
+
+Battery1Low = False
+Battery2Low = False
 
 BatteryVoltageList1=[]
 BatteryVoltageList2=[]
+
+LowPowerCount=0
 
 loopTimeStamp=time.time()
 
@@ -97,7 +100,7 @@ def PVDynamicOptimizing(SolarPower, loopCount):
         if loopCount == SolarUpdateInterval:
             SolarRefVList.append(ref1)
             IterationCount = 1
-            ref1 = ref1 - 1 #Try change the 
+            ref1 = ref1 - 0.5 #Try change the ref voltage
         elif loopCount % SolarUpdateInterval == 0:
             IterationCount = 1 + IterationCount
             target = sum(SolarPowerlist[IterationCount*SolarUpdateInterval-5:IterationCount*SolarUpdateInterval-1])/5 # Compute the average power before and after change
@@ -127,7 +130,7 @@ def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
     return {"control": control, "error": error}
 
 def management():
-    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2
+    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low
     ref0_old = 0
     ref1_old = 17
     OptmLoopCount = 1 # used for solar panel optimizing update
@@ -162,17 +165,90 @@ def management():
                 else:
                     OptmLoopCount = OptmLoopCount + 1
             else:
-                controlData = PIfeedbackControl(-5.0, -10.0, Period, currents[0],ref3,ref1_old,error)
+                controlData = PIfeedbackControl(-1.0, -1.0, Period, currents[0],ref3,ref1_old,error)
                 ref1 = controlData.get("control",ref1)
                 error = controlData.get("error",error)
 
             # Battery control
             if not OverCharging:
-                controlData = PIfeedbackControl(-5.0, -10.0, Period, currents[0],ref3,ref0_old,error)
+                controlData = PIfeedbackControl(-0.5, -1, Period, currents[0],ref3,ref0_old,error)
+                ref0 = controlData.get("control",0)
+                error = controlData.get("error",error)
+
+            else:
+                if ref1 < SolarPowerlist[0]:
+                    ref1 = SolarPowerlist[0] #if the solar power needed exceed the max power, restart the solar power optimizing
+                    PVOptimized = False
+                    OptmLoopCount = 1
+                    OverCharging = False # Change the charging 
             # Battery monitoring. todo: switching flag "OverCharging" regarding to the current and voltage of both battery port
             # todo: regulate the current and voltage of batteries in case of over charging/discharging
-
             
+            if ref0>2.0:
+                OverCharging = True
+            if voltages[1]>27.6:
+                ref0 = ref0 - 0.2*(voltage[1]-27.6)
+                if voltages[0]>27.6
+                OverCharging = True
+
+            #batteries auto balancing
+'''
+            if SoC1>SoC2+0.1:
+                if ref0>0:
+                    ref3 = ref0*(1+(SoC1-SoC2)*2) #recharge faster
+                else: ref3 = ref0/(1+(SoC1-SoC2)*2) #discharge slower
+            elif SoC1<SoC2-0.1:
+                if ref0>0:
+                    ref3 = ref0/(1+(SoC2-SoC1)*2) #recharge faster
+                else: ref3 = ref0*(1+(SoC2-SoC1)*2) #discharge slower
+            else ref3 = ref0           #normally two batteries at the same speed
+'''
+            if voltages[0]>27.6:
+                ref3 = ref3 - 0.5*(voltage[0]-27.6)
+
+            if ref0>2.0: ref0=1.9
+            if ref3>2.0: ref3=1.9
+
+            elif ref3<-5.0: ref3=-4.0
+            if ref0<-5.0: ref0=-4.5
+                LowPowerCount = LowPowerCount + 1
+            else:
+                LowPowerCount = 0
+            
+            if LowPowerCount > 100:
+                ref2=0
+                print("Warning: Power consumption too high. Power supply has been shut down\n")
+            ##
+            if SoC2<0.15:
+                Battery2Low = True
+                if SoC1<0.15: 
+                    print("Warning: Not enough battery charge, system closed\n")
+                    ref2=0
+            elif SoC1<0.15:
+                Battery1Low = True
+            
+            if Battery1Low:
+                if ref0<0: ref0=0
+                if SoC1 > 0.3: Battery1Low = False
+            if Battery2Low:
+                if ref3<0: ref3=0
+                if SoC2 > 0.3: Battery1Low = False
+            #Write the ref data to the router:
+            send_serial_data()
+
+
+def send_serial_data():
+    global ref0, ref1, ref2, ser
+    formatted_data = f"ref0: {ref0:.3f}"
+    ser.write(formatted_data.encode('utf-8'))
+    time.sleep(0.002)
+    formatted_data = f"ref1: {ref1:.3f}"
+    ser.write(formatted_data.encode('utf-8'))
+    time.sleep(0.002)
+    formatted_data = f"ref2: {ref2:.3f}"
+    ser.write(formatted_data.encode('utf-8'))
+
+
 def read_serial_data():
     """Read and parse data from the serial port."""
     global voltages, currents, ser
@@ -256,5 +332,3 @@ if __name__ == '__main__':
         socketio.run(app, host='0.0.0.0', port=8000, debug=True)
     finally:
         ser.close()  # Close the serial port when exiting
-
-
