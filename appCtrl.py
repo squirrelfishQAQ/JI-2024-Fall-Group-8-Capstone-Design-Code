@@ -30,6 +30,10 @@ Period=1/10
 SoC1=0
 SoC2=0
 
+ref0 = 0 #reference current for battery
+ref1 = 17 #reference voltage for Solar panel
+ref2 = 24 #reference voltage for Outlet
+
 Enabled=False
 
 Battery1Ref_Current=0
@@ -37,47 +41,98 @@ PVRef_Voltage=15
 
 OutletRef_Voltage=24
 
-Flag_OverCharging=0
-Flag_PVOptimized=0
+OverCharging = False
+PVOptimized = False
 
 Capacities=6.00*60*60
-BatterDecayFactor=1
-BatterDecayFactor=1
+BatterDecayFactor=1.0
+BatterDecayFactor=1.0
 
 BatteryVoltageList1=[]
 BatteryVoltageList2=[]
 
 loopTimeStamp=time.time()
 
-def SoCIntegral():
-    global currents, voltages, SoC1, SoC2, Enabled, Period
-    # put your code here, and add any necessary global variables as you wish
-    # This function will be called by management function every period
+segments = [
+    (2.95, 0.0),
+    (3.15, 0.05),
+    (3.2, 0.08),
+    (3.3, 0.33),
+    (3.32, 0.66),
+    (3.34, 0.75),
+    (3.35, 0.95),
+    (3.4, 1.0)
+]
 
 def findCapacityByVoltage(v):
-    cap = 0.0
-    if 3.40 < v <= 3.65:
-        cap = (-2500.0 / 3 * v + 8500.0 / 3)
-    elif 3.37 < v <= 3.40:
-        cap = (-42500.0 * v + 137000.0)
-    elif 3.33 < v <= 3.37:
-        cap = (-50000 * v + 161000)
-    elif 3.28 < v <= 3.33:
-        cap = (-100000.0 / 3 * v + 325000.0 / 3)
-    elif 3.21 <= v < 3.28:
-        cap = (-20000.0 * v + 66600.0)
-    elif 3.12 <= v < 3.21:
-        cap = (-25000.0 / 3 * v + 92000.0 / 3)
-    elif 2.9 <= v < 3.12:
-        cap = (-20000.0 / 11 * v + 10991.0)
-    elif 0 <= v < 2.9:
-        cap = (-500.0 / 3 * v + 19100.0 / 3)
+    if v <= segments[0][0]:
+        return 0.0
+    elif segments[0][0] < v <= segments[1][0]:
+        return ((v-segments[0][0])/(segments[1][0]-segments[0][0])*(segments[1][1]-segments[0][1])+segments[0][1])
+    elif segments[1][0] < v <= segments[2][0]:
+        return ((v-segments[1][0])/(segments[2][0]-segments[1][0])*(segments[2][1]-segments[1][1])+segments[1][1])
+    elif segments[2][0] < v <= segments[3][0]:
+        return ((v-segments[2][0])/(segments[3][0]-segments[2][0])*(segments[3][1]-segments[2][1])+segments[2][1])
+    elif segments[3][0] < v <= segments[4][0]:
+        return ((v-segments[3][0])/(segments[4][0]-segments[3][0])*(segments[4][1]-segments[3][1])+segments[3][1])
+    elif segments[4][0] < v <= segments[5][0]:
+        return ((v-segments[4][0])/(segments[5][0]-segments[4][0])*(segments[5][1]-segments[4][1])+segments[4][1])
+    elif segments[5][0] < v <= segments[6][0]:
+        return ((v-segments[5][0])/(segments[6][0]-segments[5][0])*(segments[6][1]-segments[5][1])+segments[5][1])
+    elif segments[6][0] < v <= segments[7][0]:
+        return ((v-segments[6][0])/(segments[7][0]-segments[6][0])*(segments[7][1]-segments[6][1])+segments[6][1])
+    elif v > segments[7][0]:
+        return 1.0
+
+
+SolarPowerlist = []
+SolarRefVList = []
+IterationCount = 0
+
+def PVDynamicOptimizing(SolarPower, loopCount):
+    global PVOptimized, SolarPowerlist, SolarRefVList, ref1
+    SolarUpdateInterval = 10
+    if not PVOptimized:
+        SolarPowerlist.append[SolarPower]
+        if loopCount == SolarUpdateInterval:
+            SolarRefVList.append(ref1)
+            IterationCount = 1
+            ref1 = ref1 - 1 #Try change the 
+        elif loopCount % SolarUpdateInterval == 0:
+            IterationCount = 1 + IterationCount
+            target = sum(SolarPowerlist[IterationCount*SolarUpdateInterval-5:IterationCount*SolarUpdateInterval-1])/5 # Compute the average power before and after change
+            target_old = sum(SolarPowerlist[(IterationCount-1)*SolarUpdateInterval-5:(IterationCount-1)*SolarUpdateInterval-1])/5
+            input = ref1
+            input_old = SolarRefVList[-1]
+            SolarRefVList.append(ref1)
+            grad = (target - target_old)/(input-input_old)
+            alpha = 0.5 #parameters to adjust
+            beta = 20
+            if grad < 5:
+                PVOptimized = True
+                IterationCount = 0
+                SolarPowerlist = [target]
+            ref1 = input - alpha*(input-input_old) + beta*grad/target
     else:
-        cap = 6000.0
-    return (6000.0 - cap)
+        if abs(SolarPower-SolarPowerlist[0]) > 3:
+            # Threshold for the change of solar power
+            PVOptimized = False
+            SolarPowerlist = []
+            SolarRefVList = []
+
+
+def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
+    error = refY - targetY
+    control = control_old + Ki*DeltaT*error + Kp*(error-error_old)
+    return {"control": control, "error": error}
 
 def management():
-    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2
+    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2
+    ref0_old = 0
+    ref1_old = 17
+    OptmLoopCount = 1 # used for solar panel optimizing update
+    ref3 = 0 # Try to minimize the load on port 0
+    error = 0
     while True:
         serial_data = read_serial_data()
         newTimeStamp = time.time()
@@ -89,7 +144,7 @@ def management():
         if not Enabled:
             BatteryVoltageList1.append(voltages[1])
             #BatteryVoltageList2.append(voltages[0])
-            
+
         else:
             if not hasCalculatedIniCapacity:
                 SoC1 = findCapacityByVoltage(sum(BatteryVoltageList1)/len(BatteryVoltageList1))
@@ -97,9 +152,27 @@ def management():
                 BatteryVoltageList1=[]
                 #BatteryVoltageList2=[]
                 hasCalculatedIniCapacity = True
-            SoCIntegral()
+            SoC1 = SoC1 + currents[1] * Period / (6000.0 * 3.6) #Positive current means consuming power/recharging
+            #SoC2 = SoC2 + currents[0] * Period / (6000.0 * 3.6) # Current-time integral for battery charge
+            # PV panel Optimizing and Control
+            if not OverCharging:
+                DynamicOptimizing(voltages[2]*current[2],OptmLoopCount)
+                if PVOptimized:
+                    OptmLoopCount = 1
+                else:
+                    OptmLoopCount = OptmLoopCount + 1
+            else:
+                controlData = PIfeedbackControl(-5.0, -10.0, Period, currents[0],ref3,ref1_old,error)
+                ref1 = controlData.get("control",ref1)
+                error = controlData.get("error",error)
 
-        
+            # Battery control
+            if not OverCharging:
+                controlData = PIfeedbackControl(-5.0, -10.0, Period, currents[0],ref3,ref0_old,error)
+            # Battery monitoring. todo: switching flag "OverCharging" regarding to the current and voltage of both battery port
+            # todo: regulate the current and voltage of batteries in case of over charging/discharging
+
+            
 def read_serial_data():
     """Read and parse data from the serial port."""
     global voltages, currents, ser
