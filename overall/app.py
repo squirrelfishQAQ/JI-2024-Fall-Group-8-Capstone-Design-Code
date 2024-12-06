@@ -137,6 +137,7 @@ def management():
     ref3 = 0 # Try to minimize the load on port 0
     error = 0
     while True:
+        time.sleep(0.05)
         serial_data = read_serial_data()
         #read_serial_data()
         newTimeStamp = time.time()
@@ -152,7 +153,6 @@ def management():
             BatteryVoltageList1.append(voltages[1])
             print(BatteryVoltageList1)
             #BatteryVoltageList2.append(voltages[0])
-            time.sleep(0.05)
         else:
             if not hasCalculatedIniCapacity:
                 SoC1 = findCapacityByVoltage(sum(BatteryVoltageList1)/len(BatteryVoltageList1)/8)
@@ -250,7 +250,7 @@ def send_serial_data():
 
 def read_serial_data():
     """Read and parse data from the serial port."""
-    global voltages, currents, ser
+    global voltages, currents, ser, data_lock
     Failed = True
     while Failed:
         if ser.in_waiting > 0:
@@ -258,14 +258,10 @@ def read_serial_data():
                 # Read a line of serial data
                 line = ser.readline().decode('utf-8').strip()
                 # print(line)
-                # Check if the line starts with the expected format
-                # if line.startswith("voltage & Current:"):
-                    # Remove the label and split the numeric data
                 values = line.replace("voltage & Current:", "").strip().split(", ")
                 # print(values)
                     # Convert the values to floats
                 values = [float(v) for v in values]
-                
                 if len(values) == 8:  # Ensure we have exactly 8 values
                         # Separate voltages and currents
                     with data_lock:
@@ -275,7 +271,6 @@ def read_serial_data():
                         print(currents)
                     return {"voltages": voltages, "currents": currents}
                     Failed = False
-                # print("Unexpected data format:", line)
             except Exception as e:
                 Failed = True
                 print("Error reading serial data:", e)
