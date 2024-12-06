@@ -15,7 +15,7 @@ ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
 
 # Background Thread
 thread = None
-# thread_lock = Lock()
+thread_lock = Lock()
 
 # Setup for threading management and website
 data_lock = Lock()
@@ -55,6 +55,9 @@ loopTimeStamp=time.time()
 
 hasCalculatedIniCapacity=False
 
+# Check the threads availability
+# running = True
+
 segments = [
     (2.95, 0.0),
     (3.15, 0.05),
@@ -87,7 +90,7 @@ def findCapacityByVoltage(v):
         return 1.0
     
 SolarPowerlist = []
-SolarRefVList = [17]
+SolarRefVList = []
 IterationCount = 0
 
 def PVDynamicOptimizing(SolarPower, loopCount):
@@ -119,7 +122,7 @@ def PVDynamicOptimizing(SolarPower, loopCount):
             # Threshold for the change of solar power
             PVOptimized = False
             SolarPowerlist = []
-            SolarRefVList = [17]
+            # SolarRefVList = []
 
 
 def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
@@ -128,7 +131,6 @@ def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
     return {"control": control, "error": error}
 
 def management():
-    # print("Management is running")
     global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low, hasCalculatedIniCapacity
     global OverCharging
     ref0_old = 0
@@ -137,23 +139,26 @@ def management():
     ref3 = 0 # Try to minimize the load on port 0
     error = 0
     while True:
-        time.sleep(0.05)
-        serial_data = read_serial_data()
-        #read_serial_data()
         newTimeStamp = time.time()
-        Period = newTimeStamp - loopTimeStamp
-        loopTimeStamp = newTimeStamp
+        with data_lock:
+            Period = newTimeStamp - loopTimeStamp
+            loopTimeStamp = newTimeStamp
 
-        voltages = serial_data.get("voltages", [0, 0, 0, 0])
-        currents = serial_data.get("currents", [0, 0, 0, 0])
-        # print(voltages)
-        # print(currents)
-        # global voltages, currents
+        serial_data = read_serial_data()
+        if not serial_data:
+            time.sleep(0.1)
+            continue
+        with data_lock:
+            voltages = serial_data.get("voltages", [0, 0, 0, 0])
+            currents = serial_data.get("currents", [0, 0, 0, 0])
+
         if not Enabled:
             BatteryVoltageList1.append(voltages[1])
             print(BatteryVoltageList1)
             #BatteryVoltageList2.append(voltages[0])
+            time.sleep(1)
         else:
+            time.sleep(1)
             if not hasCalculatedIniCapacity:
                 SoC1 = findCapacityByVoltage(sum(BatteryVoltageList1)/len(BatteryVoltageList1)/8)
                 #SoC2 = findCapacityByVoltage(sum(BatteryVoltageList2)/len(BatteryVoltageList2)/8)
@@ -164,7 +169,7 @@ def management():
             #SoC2 = SoC2 + currents[0] * Period / (6000.0 * 3.6) # Current-time integral for battery charge
             # PV panel Optimizing and Control
             if not OverCharging:
-                PVDynamicOptimizing(voltages[2]*currents[2],OptmLoopCount)
+                PVDynamicOptimizing(-voltages[2]*currents[2],OptmLoopCount)
                 if PVOptimized:
                     OptmLoopCount = 1
                 else:
@@ -234,53 +239,53 @@ def management():
                 if SoC2 > 0.3: Battery1Low = False
             #Write the ref data to the router:
             send_serial_data()
-            time.sleep(1)
+        time.sleep(1)
 
 def send_serial_data():
     global ref0, ref1, ref2, ser
-    formatted_data = f"ref0: {ref0:.3f}\n"
-    ser.write(formatted_data.encode('utf-8'))
-    time.sleep(0.002)
-    formatted_data = f"ref1: {ref1:.3f}\n"
-    ser.write(formatted_data.encode('utf-8'))
-    time.sleep(0.002)
-    formatted_data = f"ref2: {ref2:.3f}\n"
-    ser.write(formatted_data.encode('utf-8'))
-    time.sleep(0.002)
+    try:
+        with data_lock:
+            formatted_data = f"ref0: {ref0:.3f}\n"
+            ser.write(formatted_data.encode('utf-8'))
+            time.sleep(0.002)
+            formatted_data = f"ref1: {ref1:.3f}\n"
+            ser.write(formatted_data.encode('utf-8'))
+            time.sleep(0.002)
+            formatted_data = f"ref2: {ref2:.3f}\n"
+            ser.write(formatted_data.encode('utf-8'))
+            time.sleep(0.002)
+    except Exception as e:
+        print(f"Error sending serial data: {e}")
 
 def read_serial_data():
     """Read and parse data from the serial port."""
-    global voltages, currents, ser, data_lock
-    Failed = True
-    while Failed:
-        if ser.in_waiting > 0:
-            # try:
-                # Read a line of serial data
+    global voltages, currents, ser
+    while True:
+        try:
+            if ser.in_waiting > 0:
                 line = ser.readline().decode('utf-8').strip()
-                # print(line)
-                values = line.replace("voltage & Current:", "").strip().split(", ")
-                # print(values)
-                    # Convert the values to floats
-                values = [float(v) for v in values]
-                if len(values) == 8:  # Ensure we have exactly 8 values
-                        # Separate voltages and currents
-                    with data_lock:
-                        voltages = values[:4]
-                        currents = values[4:]
-                        print(voltages)
-                        print(currents)
-                    return {"voltages": voltages, "currents": currents}
-                    Failed = False
-            except Exception as e:
-                Failed = True
-                print("Error reading serial data:", e)
-                time.sleep(0.02)
+                # Check input format
+                if line.startswith("voltage & Current:"):
+                    values = line.replace("voltage & Current:", "").strip().split(", ")
+                    values = [float(v) for v in values]
+                    if len(values) == 8:
+                        with data_lock:
+                            voltages = values[:4]
+                            currents = values[4:]
+                            print(voltages)
+                            print(currents)
+                        return {"voltages": voltages, "currents": currents}
+        except ValueError:
+            print("Error: Invalid data format received from serial.")
+            continue
+        except Exception as e:
+            print(f"Unexpected error while reading serial: {e}")
+            continue            
     return None
 
 def update_power_data():
     while True:
         global voltages, currents, SoC1, SoC2
-
         with data_lock:
             # Calculate power values
             solar = round(voltages[2] * currents[2], 1)
@@ -307,10 +312,8 @@ def update_power_data():
         
 @socketio.on('start_stream')
 def start_stream():
-    global ref2, ser, Enabled, data_lock
+    global ref2, ser, Enabled
     """Start streaming data."""
-    # global streaming
-    # streaming = True
     Enabled = True
     text = "PIDstart\n"
     ref2 = 24
@@ -321,7 +324,7 @@ def start_stream():
 
 @socketio.on('stop_stream')
 def stop_stream():
-    global ser, Enabled, data_lock
+    global ser, Enabled
     """Stop streaming data."""
     # global streaming
     # streaming = 
@@ -340,14 +343,8 @@ def index():
 def handle_connect():
     """Start the thread if it's not already running."""
     global thread
-    # with thread_lock:
     if thread is None:
         thread = socketio.start_background_task(update_power_data)
-    # if not thread.is_alive():
-    #     thread = socketio.start_background_task(update_power_data)
-
-# def website():
-    # socketio.run(app, host='0.0.0.0', port=8000, debug=True)
 
 if __name__ == '__main__':
     # Start the management thread
@@ -356,22 +353,4 @@ if __name__ == '__main__':
     
     # Start Flask-SocketIO server
     socketio.run(app, host='0.0.0.0', port=800)
-    # Start the management function in a separate thread
-    # send_serial_data()
-    
-    # website_thread.start()
-    # website_thread = Thread(target=website())
-    # # management()
-    # management_thread = Thread(target=management())
-    # # Start the Flask website
-    # # website_thread.start()
-    
-    
-    # socketio.run(app, host='0.0.0.0', port=8000, threading = True)
-    # # management_thread.start()
-    # # management_thread.join()
-    # # website_thread.join()
-    # management()
-    
-    # website_thread = Thread(target=website(), daemon=True)
     
