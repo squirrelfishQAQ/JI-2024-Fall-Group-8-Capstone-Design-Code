@@ -236,7 +236,7 @@ def management():
                 if SoC1 > 0.3: Battery1Low = False
             if Battery2Low:
                 if ref3<0: ref3=0
-                if SoC2 > 0.3: Battery1Low = False
+                if SoC2 > 0.3: Battery2Low = False
             #Write the ref data to the router:
             send_serial_data()
         time.sleep(1)
@@ -316,7 +316,7 @@ def start_stream():
     """Start streaming data."""
     Enabled = True
     text = "PIDstart\n"
-    ref2 = 24
+    # ref2 = 24
     with data_lock:
         ser.write(text.encode('utf-8'))
         time.sleep(0.01)
