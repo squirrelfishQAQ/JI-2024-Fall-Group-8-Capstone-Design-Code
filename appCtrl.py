@@ -130,7 +130,7 @@ def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
     return {"control": control, "error": error}
 
 def management():
-    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low
+    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, SolarRefVList, Battery1Low, Battery2Low
     ref0_old = 0
     ref1_old = 17
     OptmLoopCount = 1 # used for solar panel optimizing update
@@ -176,8 +176,8 @@ def management():
                 error = controlData.get("error",error)
 
             else:
-                if ref1 < SolarPowerlist[0]:
-                    ref1 = SolarPowerlist[0] #if the solar power needed exceed the max power, restart the solar power optimizing
+                if ref1 < SolarRefVList[-1]:
+                    ref1 = SolarRefVList[-1] #if the solar power needed exceed the max power, restart the solar power optimizing
                     PVOptimized = False
                     OptmLoopCount = 1
                     OverCharging = False # Change the charging 
@@ -239,13 +239,13 @@ def management():
 
 def send_serial_data():
     global ref0, ref1, ref2, ser
-    formatted_data = f"ref0: {ref0:.3f}"
+    formatted_data = f"ref0: {ref0:.3f}\n"
     ser.write(formatted_data.encode('utf-8'))
     time.sleep(0.002)
-    formatted_data = f"ref1: {ref1:.3f}"
+    formatted_data = f"ref1: {ref1:.3f}\n"
     ser.write(formatted_data.encode('utf-8'))
     time.sleep(0.002)
-    formatted_data = f"ref2: {ref2:.3f}"
+    formatted_data = f"ref2: {ref2:.3f}\n"
     ser.write(formatted_data.encode('utf-8'))
 
 
