@@ -15,7 +15,7 @@ ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
 
 # Background Thread
 thread = None
-thread_lock = Lock()
+# thread_lock = Lock()
 
 # Setup for threading management and website
 data_lock = Lock()
@@ -85,7 +85,7 @@ def findCapacityByVoltage(v):
         return 1.0
     
 SolarPowerlist = []
-SolarRefVList = []
+SolarRefVList = [17]
 IterationCount = 0
 
 def PVDynamicOptimizing(SolarPower, loopCount):
@@ -117,7 +117,7 @@ def PVDynamicOptimizing(SolarPower, loopCount):
             # Threshold for the change of solar power
             PVOptimized = False
             SolarPowerlist = []
-            # SolarRefVList = []
+            SolarRefVList = [17]
 
 
 def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
@@ -146,7 +146,7 @@ def management():
         if not Enabled:
             BatteryVoltageList1.append(voltages[1])
             #BatteryVoltageList2.append(voltages[0])
-            time.sleep(1)
+            time.sleep(0.05)
         else:
             if not hasCalculatedIniCapacity:
                 SoC1 = findCapacityByVoltage(sum(BatteryVoltageList1)/len(BatteryVoltageList1)/8)
@@ -245,7 +245,8 @@ def management():
 def read_serial_data():
     """Read and parse data from the serial port."""
     global voltages, currents, ser
-    while True:
+    Failed = True
+    while Failed:
         if ser.in_waiting > 0:
             # try:
                 # Read a line of serial data
@@ -265,10 +266,12 @@ def read_serial_data():
                         voltages = values[:4]
                         currents = values[4:]
                     return {"voltages": voltages, "currents": currents}
-                        #Why added break here?
+                    Failed = False
                 # print("Unexpected data format:", line)
-            # except Exception as e:
-            #     print("Error reading serial data:", e)
+            except Exception as e:
+                Failed = True
+                print("Error reading serial data:", e)
+                time.sleep(0.02)
     return None
 
 def update_power_data():
@@ -301,25 +304,29 @@ def update_power_data():
         
 @socketio.on('start_stream')
 def start_stream():
-    global ref2, ser, Enabled
+    global ref2, ser, Enabled, data_lock
     """Start streaming data."""
     # global streaming
     # streaming = True
     Enabled = True
     text = "PIDstart\n"
     ref2 = 24
-    ser.write(text.encode('utf-8'))
+    with data_lock:
+        ser.write(text.encode('utf-8'))
+        time.sleep(0.01)
     print("Data streaming started.")
 
 @socketio.on('stop_stream')
 def stop_stream():
-    global ser, Enabled
+    global ser, Enabled, data_lock
     """Stop streaming data."""
     # global streaming
     # streaming = 
     Enabled = False 
-    text = "disable\n"
-    ser.write(text.encode('utf-8'))
+    text = "disableAll\n"
+    with data_lock:
+        ser.write(text.encode('utf-8'))
+        time.sleep(0.01)
     print("Data streaming stopped.")
 
 @app.route('/')
