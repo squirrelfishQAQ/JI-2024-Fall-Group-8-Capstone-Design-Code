@@ -53,6 +53,8 @@ BatteryVoltageList2=[]
 
 loopTimeStamp=time.time()
 
+hasCalculatedIniCapacity=False
+
 segments = [
     (2.95, 0.0),
     (3.15, 0.05),
@@ -126,8 +128,9 @@ def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
     return {"control": control, "error": error}
 
 def management():
-    print("Management is running")
-    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low
+    # print("Management is running")
+    global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low, hasCalculatedIniCapacity
+    global OverCharging
     ref0_old = 0
     ref1_old = 17
     OptmLoopCount = 1 # used for solar panel optimizing update
@@ -142,9 +145,12 @@ def management():
 
         voltages = serial_data.get("voltages", [0, 0, 0, 0])
         currents = serial_data.get("currents", [0, 0, 0, 0])
+        # print(voltages)
+        # print(currents)
         # global voltages, currents
         if not Enabled:
             BatteryVoltageList1.append(voltages[1])
+            print(BatteryVoltageList1)
             #BatteryVoltageList2.append(voltages[0])
             time.sleep(0.05)
         else:
@@ -227,20 +233,20 @@ def management():
                 if ref3<0: ref3=0
                 if SoC2 > 0.3: Battery1Low = False
             #Write the ref data to the router:
-#             send_serial_data()
+            send_serial_data()
             time.sleep(1)
 
-# def send_serial_data():
-#     global ref0, ref1, ref2, ser
-#     formatted_data = f"ref0: {ref0:.3f}\n"
-#     ser.write(formatted_data.encode('utf-8'))
-#     time.sleep(0.002)
-#     formatted_data = f"ref1: {ref1:.3f}\n"
-#     ser.write(formatted_data.encode('utf-8'))
-#     time.sleep(0.002)
-#     formatted_data = f"ref2: {ref2:.3f}\n"
-#     ser.write(formatted_data.encode('utf-8'))
-#     time.sleep(0.002)
+def send_serial_data():
+    global ref0, ref1, ref2, ser
+    formatted_data = f"ref0: {ref0:.3f}\n"
+    ser.write(formatted_data.encode('utf-8'))
+    time.sleep(0.002)
+    formatted_data = f"ref1: {ref1:.3f}\n"
+    ser.write(formatted_data.encode('utf-8'))
+    time.sleep(0.002)
+    formatted_data = f"ref2: {ref2:.3f}\n"
+    ser.write(formatted_data.encode('utf-8'))
+    time.sleep(0.002)
 
 def read_serial_data():
     """Read and parse data from the serial port."""
@@ -265,6 +271,8 @@ def read_serial_data():
                     with data_lock:
                         voltages = values[:4]
                         currents = values[4:]
+                        print(voltages)
+                        print(currents)
                     return {"voltages": voltages, "currents": currents}
                     Failed = False
                 # print("Unexpected data format:", line)
@@ -288,7 +296,7 @@ def update_power_data():
             pct2 = round(SoC2 * 100, 1)
             # Prepare Data for sending
         power_data = {
-            'solar': solar,
+            'solar': - solar,
             'apply': apply,
             'charge1': charge1,
             'charge2': charge2,
@@ -352,7 +360,7 @@ if __name__ == '__main__':
     management_thread.start()
     
     # Start Flask-SocketIO server
-    socketio.run(app, host='0.0.0.0', port=8000)
+    socketio.run(app, host='0.0.0.0', port=800)
     # Start the management function in a separate thread
     # send_serial_data()
     
