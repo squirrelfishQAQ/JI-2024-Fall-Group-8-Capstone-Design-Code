@@ -116,12 +116,13 @@ def PVDynamicOptimizing(SolarPower, loopCount):
                 PVOptimized = True
                 IterationCount = 0
                 SolarPowerlist = [target]
+                SolarRefVList = [ref1]
             ref1 = input - alpha*(input-input_old) + beta*grad/target
     else:
         if abs(SolarPower-SolarPowerlist[0]) > 3:
             # Threshold for the change of solar power
             PVOptimized = False
-            SolarPowerlist = []
+            SolarPowerlist = [ref1]
             # SolarRefVList = []
 
 
@@ -132,9 +133,9 @@ def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
 
 def management():
     global BatteryVoltageList1, BatteryVoltageList2, loopTimeStamp, Period, SoC1, SoC2, PVOptimized, ref0, ref1, ref2, SolarRefVList, Battery1Low, Battery2Low, hasCalculatedIniCapacity
-    global OverCharging
-    ref0_old = 0
-    ref1_old = 17
+    global OverCharging, LowPowerCount
+
+    LowPowerCount = 0
     OptmLoopCount = 1 # used for solar panel optimizing update
     ref3 = 0 # Try to minimize the load on port 0
     error = 0
@@ -168,60 +169,24 @@ def management():
             SoC1 = SoC1 + currents[1] * Period / (6000.0 * 3.6) #Positive current means consuming power/recharging
             #SoC2 = SoC2 + currents[0] * Period / (6000.0 * 3.6) # Current-time integral for battery charge
             # PV panel Optimizing and Control
-            if not OverCharging:
-                PVDynamicOptimizing(-voltages[2]*currents[2],OptmLoopCount)
-                if PVOptimized:
-                    OptmLoopCount = 1
-                else:
-                    OptmLoopCount = OptmLoopCount + 1
-            else:
-                controlData = PIfeedbackControl(-1.0, -1.0, Period, currents[0],ref3,ref1_old,error)
-                ref1 = controlData.get("control",ref1)
-                error = controlData.get("error",error)
-
-            # Battery control
-            if not OverCharging:
-                controlData = PIfeedbackControl(-0.5, -1, Period, currents[0],ref3,ref0_old,error)
-                ref0 = controlData.get("control",0)
-                error = controlData.get("error",error)
-
-            else:
-                if ref1 < SolarRefVList[-1]:
-                    ref1 = SolarRefVList[-1] #if the solar power needed exceed the max power, restart the solar power optimizing
-                    PVOptimized = False
-                    OptmLoopCount = 1
-                    OverCharging = False # Change the charging 
-            # Battery monitoring. todo: switching flag "OverCharging" regarding to the current and voltage of both battery port
-            # todo: regulate the current and voltage of batteries in case of over charging/discharging
             
             if ref0>2.0:
                 OverCharging = True
             if voltages[1]>27.6:
-                ref0 = ref0 - 0.2*(voltages[1]-27.6)
+                ref0 = ref0 - 1.0*(voltages[1]-27.6)*Period
                 if voltages[0]>27.6:
                     OverCharging = True
 
             #batteries auto balancing
+            if (SoC1-SoC2)>0.1:
+                if ref0>0: ref3 = ref0*(1+(SoC1-SoC2)*2)
+                elif ref0<0: ref3 = ref0/(1+(SoC1-SoC2)*2)
+            elif (SoC2-SoC1)>0.1:
+                if ref0>0: ref3 = ref0/(1-(SoC1-SoC2)*2)
+                elif ref0<0: ref3 = ref0*(1-(SoC1-SoC2)*2)
 
             if voltages[0]>27.6:
-                ref3 = ref3 - 0.5*(voltages[0]-27.6)
-
-            if ref0>2.0: 
-                ref0=1.9
-            if ref3>2.0: 
-                ref3=1.9
-
-            elif ref3<-5.0: 
-                ref3=-4.0
-            if ref0<-5.0: 
-                ref0=-4.5
-                LowPowerCount = LowPowerCount + 1
-            else:
-                LowPowerCount = 0
-            
-            if LowPowerCount > 100:
-                ref2=0
-                print("Warning: Power consumption too high. Power supply has been shut down\n")
+                ref3 = ref3 - 2.0*(voltages[0]-27.6)*Period
             ##
             if SoC2<0.15:
                 Battery2Low = True
@@ -231,12 +196,52 @@ def management():
             elif SoC1<0.15:
                 Battery1Low = True
             
+            if Battery2Low:
+                if ref3<0: ref3=0
+                if SoC2 > 0.3: Battery2Low = False
+
+            if ref3>2.0: ref3=1.9
+            elif ref3<-5.0: ref3=-4.0
+
+            if current[0]<-4:
+                LowPowerCount = 1+LowPowerCount
+            else:
+                LowPowerCount = 0
+            if LowPowerCount>10
+                ref2 = 0
+                print("Warning: System power supply is insufficient. Please reduce the appliance power.\n")
+
+            # PV and control
+            if not OverCharging:
+                PVDynamicOptimizing(-voltages[2]*currents[2],OptmLoopCount)
+                if PVOptimized:
+                    OptmLoopCount = 1
+                else:
+                    OptmLoopCount = OptmLoopCount + 1
+            else:
+                controlData = PIfeedbackControl(-1.0, -1.0, Period, currents[0], ref3, ref1, error)
+                ref1 = controlData.get("control",ref1)
+                error = controlData.get("error",error)
+
+            # Battery control
+            if not OverCharging:
+                controlData = PIfeedbackControl(-0.5, -1, Period, currents[0], ref3, ref0, error)
+                ref0 = controlData.get("control",0)
+                error = controlData.get("error",error)
+
+            else:
+                if ref1 < SolarRefVList[-1]:
+                    ref1 = SolarRefVList[-1] #if the solar power needed exceed the max power, restart the solar power optimizing
+                    PVOptimized = False
+                    OptmLoopCount = 1
+                    OverCharging = False # Change the charging 
+            
+            if ref0>2.0: ref0=1.9
+            elif ref0<-5.0: ref0=-4.5
+            
             if Battery1Low:
                 if ref0<0: ref0=0
                 if SoC1 > 0.3: Battery1Low = False
-            if Battery2Low:
-                if ref3<0: ref3=0
-                if SoC2 > 0.3: Battery1Low = False
             #Write the ref data to the router:
             send_serial_data()
         time.sleep(1)
@@ -316,7 +321,7 @@ def start_stream():
     """Start streaming data."""
     Enabled = True
     text = "PIDstart\n"
-    ref2 = 24
+    # ref2 = 24
     with data_lock:
         ser.write(text.encode('utf-8'))
         time.sleep(0.01)
