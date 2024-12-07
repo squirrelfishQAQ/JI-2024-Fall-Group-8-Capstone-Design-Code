@@ -148,28 +148,152 @@
         // Function to update image based on conditions
         function updateImage(solar, apply, charge1, charge2, consume1, consume2) {
             const image = document.getElementById('router-image'); 
-            if (solar > 0) {
-                if (apply > 0) {
-                    if (apply > solar) {
-                        image.src = "{{ url_for('static', filename='Day-using.png') }}";
+            // image.src = "{{ url_for('static', filename='Day-nothing.png') }}";
+            if (solar > 2) {
+                if (apply > 1) {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.001.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.002.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.003.jpg') }}";
+                        }
                     }
-                    else if (apply < solar) {
-                        image.src = "{{ url_for('static', filename='Day-charging+using.png') }}";
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.004.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.005.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.006.jpg') }}";
+                        }
                     }
                     else {
-                        image.src = "{{ url_for('static', filename='Day-withoutbat.png') }}";
-                    } 
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.007.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.008.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.009.jpg') }}";
+                        }                        
+                    }
                 }
+                // apply <= 1
                 else {
-                    image.src = "{{ url_for('static', filename='Day-charging.png') }}";
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.010.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.011.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.012.jpg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.013.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.014.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.015.jpg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.016.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.017.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.018.jpg') }}";
+                        }                        
+                    }
                 }
             }
+            // Solar <= 2: consider no solar power
             else {
-                if (apply > 0) {
-                    image.src = "{{ url_for('static', filename='Day-using+nolight.png') }}";
+                if (apply > 1) {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.019.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.020.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.021.jpg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.022.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.023.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.024.jpg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.025.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.026.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.027.jpg') }}";
+                        }                        
+                    }
                 }
+                // apply <= 1, consider no apply
                 else {
-                    image.src = "{{ url_for('static', filename='Day-nothing.png') }}";
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.028.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.029.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.030.jpg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.031.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.032.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.033.jpg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.034.jpg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.035.jpg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.036.jpg') }}";
+                        }                        
+                    }
                 }
             }
         }
@@ -194,8 +318,8 @@
             battery1.innerText = data.pct1 + ' %';
             battery2.innerText = data.pct2 + ' %';
 
-            solarElement.style.display = data.solar > 0 ? 'block' : 'none';
-            applyElement.style.display = data.apply > 0 ? 'block' : 'none';
+            solarElement.style.display = data.solar > 2 ? 'block' : 'none';
+            applyElement.style.display = data.apply > 1 ? 'block' : 'none';
             chargeElement1.style.display = data.charge1 > 0 ? 'block' : 'none';
             chargeElement2.style.display = data.charge2 > 0 ? 'block' : 'none';
             consumeElement1.style.display = data.consume1 > 0 ? 'block' : 'none';
