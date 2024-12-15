@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Router Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.0/socket.io.min.js"></script>
+    <style>
+        body {
+            text-align: center;
+            background-color: #ffffff;
+            color: rgb(0, 0, 0);
+            font-size: calc(14px + 1vw);
+            margin: 0; /* Remove default margin */
+            overflow-x: hidden; /* Prevent horizontal scrolling */
+        }
+        .top-bar {
+            display: flex;
+            align-items: left;
+            background-color: #0300ad; /* Light gray background */
+            /* padding: 10px 0; */
+            /* border-bottom: 2px solid #ddd; */
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow for style */
+            font-size: 1.2em; /* Adjust font size */
+            /* position: sticky; Keep the bar fixed at the top */
+            top: 0;
+            z-index: 1000; /* Ensure it stays above other elements */
+            width: 100%;
+        }
+
+        .top-bar .title {
+            flex: 0 0 50%; /* Use 50% of the bar for the title */
+            text-align: center;
+            /* padding-left: 10px; */
+            font-weight: bold;
+            color: rgb(255, 217, 0);
+        }
+
+        .top-bar .controls {
+            flex: 0 0 50%; /* Use remaining 50% for controls and alert */
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .top-bar .btn {
+            flex: 0 0 10%; /* Each button occupies 10% */
+            margin: 5px; /* Add spacing between buttons */
+            text-align: center;
+        }
+
+        .top-bar .alert-message {
+            flex: 0 0 70%; /* Alert message takes up 30% */
+            text-align: center;
+            color: rgb(255, 217, 0);
+            font-size: 1em;
+            font-weight: bold;
+            /* padding-right: 10px; */
+        }
+
+        .container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .container img {
+            aspect-ratio: 16 / 9;
+            max-width: 100%;
+            height: auto;
+        }
+        .label {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            font-size: 3vw;
+            padding: 0.3em;
+            background-color: transparent;
+            color: rgb(0, 0, 0);
+            display: flex; /* Initially hidden */
+            justify-content: center; /* Horizontally center the text */
+            align-items: center; /* Vertically center the text */
+            font-weight: bold; /* Optional: Make text bold */
+            text-align: center;
+        }
+        #solar { top: 15%; right: 29%; transform: translateX(50%); }
+        #apply { top: 15.5%; left:31%; transform: translateX(-50%); } 
+        #charge1 { bottom: 21.5%; left: 31%; transform: translateX(-50%); } 
+        #charge2 { bottom: 21.5%; right: 30.5%; transform: translateX(50%); } 
+        #consume1 { bottom: 48.3%; left: 24.5%; transform: translateX(-50%); } 
+        #consume2 { bottom: 48.3%; right: 22.5%; transform: translateX(50%); } 
+        #pct1 { bottom: 6.5%; left: 13.5%; transform: translateX(-50%); } 
+        #pct2 { bottom: 6.5%; right: 12%; transform: translateX(50%); }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <div class="top-bar">
+        <div class="title">Energy Router Visualization</div>
+        <div class="controls">
+            <button id="start-btn" class="btn btn-success" onclick="sendStart()">Start</button>
+            <button id="stop-btn" class="btn btn-danger" onclick="sendStop()">Stop</button>
+            <span id="alert-message" class="alert-message"></span>
+        </div>
+    </div>
+
+    <!-- Alert Message -->
+    <div id="alert-container" style="margin-top: 20px; text-align: center;">
+        <span id="alert-message" style="font-size: 18px; color: #333;"></span>
+    </div>
+
+    <div class="container">
+        <img id="router-image" src="{{ url_for('static', filename='visual1.png') }}" alt="Visual 1" style="max-width: 100%; height: auto;">
+        <div id="solar" class="label">0 W</div>
+        <div id="apply" class="label">0 W</div>
+        <div id="charge1" class="label">0 W</div>
+        <div id="charge2" class="label">0 W</div>
+        <div id="consume1" class="label">0 W</div>
+        <div id="consume2" class="label">0 W</div>
+        <div id="pct1" class="label">0 W</div>
+        <div id="pct2" class="label">0 W</div>
+    </div>
+    
+    <script>
+        const socket = io();
+        
+        // Function to show alert messages
+        function showAlert(message, duration = 0) {
+            const alertMessage = document.getElementById('alert-message');
+            alertMessage.textContent = message;
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    alertMessage.textContent = ''; // Clear message after duration
+                }, duration);
+            }
+        }
+
+        // Start button handler
+        function sendStart() {
+            socket.emit('start_stream');
+            showAlert('System is running'); 
+        }
+        // Stop button handler
+        function sendStop() {
+            socket.emit('stop_stream');
+            showAlert('System is stopped'); // Show message indefinitely
+        }
+
+        // Function to update image based on conditions
+        function updateImage(solar, apply, charge1, charge2, consume1, consume2) {
+            const image = document.getElementById('router-image'); 
+            // image.src = "{{ url_for('static', filename='Day-nothing.png') }}";
+            if (solar > 2) {
+                if (apply > 1) {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.001.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.002.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.003.jpeg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.004.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.005.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.006.jpeg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.007.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.008.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.009.jpeg') }}";
+                        }                        
+                    }
+                }
+                // apply <= 1
+                else {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.010.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.011.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.012.jpeg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.013.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.014.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.015.jpeg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.016.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.017.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.018.jpeg') }}";
+                        }                        
+                    }
+                }
+            }
+            // Solar <= 2: consider no solar power
+            else {
+                if (apply > 1) {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.019.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.020.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.021.jpeg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.022.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.023.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.024.jpeg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.025.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.026.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.027.jpeg') }}";
+                        }                        
+                    }
+                }
+                // apply <= 1, consider no apply
+                else {
+                    if (charge1 > 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.028.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.029.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.030.jpeg') }}";
+                        }
+                    }
+                    else if (charge1 == 0) {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.031.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.032.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.033.jpeg') }}";
+                        }
+                    }
+                    else {
+                        if (charge2 > 0) {
+                            image.src = "{{ url_for('static', filename='template.034.jpeg') }}";
+                        }
+                        else if (charge2 == 0) {
+                            image.src = "{{ url_for('static', filename='template.035.jpeg') }}";
+                        }
+                        else {
+                            image.src = "{{ url_for('static', filename='template.036.jpeg') }}";
+                        }                        
+                    }
+                }
+            }
+        }
+
+        socket.on('power_update', data => {
+            // Update labels and hide them if necessary
+            const solarElement = document.getElementById('solar');
+            const applyElement = document.getElementById('apply');
+            const chargeElement1 = document.getElementById('charge1');
+            const chargeElement2 = document.getElementById('charge2');
+            const consumeElement1 = document.getElementById('consume1');
+            const consumeElement2 = document.getElementById('consume2');
+            const battery1 = document.getElementById('pct1');
+            const battery2 = document.getElementById('pct2');
+
+            solarElement.innerText = data.solar + ' W';
+            applyElement.innerText = data.apply + ' W';
+            chargeElement1.innerText = data.charge1 + ' W';
+            chargeElement2.innerText = data.charge2 + ' W';
+            consumeElement1.innerText = data.consume1 + ' W';
+            consumeElement2.innerText = data.consume2 + ' W';
+            battery1.innerText = data.pct1 + ' %';
+            battery2.innerText = data.pct2 + ' %';
+
+            solarElement.style.display = data.solar > 2 ? 'block' : 'none';
+            applyElement.style.display = data.apply > 1 ? 'block' : 'none';
+            chargeElement1.style.display = data.charge1 > 0 ? 'block' : 'none';
+            chargeElement2.style.display = data.charge2 > 0 ? 'block' : 'none';
+            consumeElement1.style.display = data.consume1 > 0 ? 'block' : 'none';
+            consumeElement2.style.display = data.consume2 > 0 ? 'block' : 'none';
+
+            // Update pct1 and pct2 (always visible)
+            // document.getElementById('pct1').innerText = data.pct1 + ' %';
+            // document.getElementById('pct2').innerText = data.pct2 + ' %';
+            battery1.style.display = 'block';
+            battery2.style.display = 'block';
+
+            // Call the function to update the image
+            updateImage(data.solar, data.apply, data.charge1, data.charge2, data.consume1, data.consume2);
+        });
+    </script>
+</body>
+</html>
