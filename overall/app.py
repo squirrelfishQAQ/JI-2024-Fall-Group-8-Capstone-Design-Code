@@ -170,13 +170,6 @@ def management():
             #SoC2 = SoC2 + currents[0] * Period / (6000.0 * 3.6) # Current-time integral for battery charge
             # PV panel Optimizing and Control
             
-            if ref0>2.0:
-                OverCharging = True
-            if voltages[1]>27.6:
-                ref0 = ref0 - 1.0*(voltages[1]-27.6)*Period
-                if voltages[0]>27.6:
-                    OverCharging = True
-
             #batteries auto balancing
             if (SoC1-SoC2)>0.1:
                 if ref0>0: ref3 = ref0*(1+(SoC1-SoC2)*2)
@@ -186,7 +179,7 @@ def management():
                 elif ref0<0: ref3 = ref0*(1-(SoC1-SoC2)*2)
 
             if voltages[0]>27.6:
-                ref3 = ref3 - 2.0*(voltages[0]-27.6)*Period
+                ref3 = currents[0] - 2.0*(voltages[0]-27.6)*Period
             ##
             if SoC2<0.15:
                 Battery2Low = True
@@ -200,14 +193,16 @@ def management():
                 if ref3<0: ref3=0
                 if SoC2 > 0.3: Battery2Low = False
 
-            if ref3>2.0: ref3=1.9
+            if ref3>2.0: 
+                ref3=1.9
+                if ref0>2.0: OverCharging = True
             elif ref3<-5.0: ref3=-4.0
 
             if current[0]<-4:
                 LowPowerCount = 1+LowPowerCount
             else:
                 LowPowerCount = 0
-            if LowPowerCount>10
+            if LowPowerCount>10:
                 ref2 = 0
                 print("Warning: System power supply is insufficient. Please reduce the appliance power.\n")
 
@@ -235,6 +230,11 @@ def management():
                     PVOptimized = False
                     OptmLoopCount = 1
                     OverCharging = False # Change the charging 
+                    
+            if voltages[1]>27.6:
+                ref0 = currents[1] - 1.0*(voltages[1]-27.6)*Period
+                if voltages[0]>27.6:
+                    OverCharging = True
             
             if ref0>2.0: ref0=1.9
             elif ref0<-5.0: ref0=-4.5
