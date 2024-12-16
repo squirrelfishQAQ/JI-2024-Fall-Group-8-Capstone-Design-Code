@@ -26,8 +26,8 @@ Period=1/10
 SoC1=0.5
 SoC2=0.5
 ref0 = 0 #reference current for battery
-ref1 = 17 #reference voltage for Solar panel
-ref2 = 24 #reference voltage for Outlet
+ref1 = 24.0 #reference voltage for Solar panel
+ref2 = 24.0 #reference voltage for Outlet
 # ??
 Enabled=False
 
@@ -90,7 +90,7 @@ def findCapacityByVoltage(v):
         return 1.0
     
 SolarPowerlist = []
-SolarRefVList = []
+SolarRefVList = [ref1]
 IterationCount = 0
 
 def PVDynamicOptimizing(SolarPower, loopCount):
@@ -111,19 +111,19 @@ def PVDynamicOptimizing(SolarPower, loopCount):
             SolarRefVList.append(ref1)
             grad = (target - target_old)/(input-input_old)
             alpha = 0.5 #parameters to adjust
-            beta = 0.2
-            if abs(grad) < 1:
+            beta = 0.6
+            if abs(grad) < 0.3 or abs(grad) > 10:
                 PVOptimized = True
                 print("Solar panel optimized\n")
                 IterationCount = 0
                 SolarPowerlist = [target]
-            ref1 = input - alpha*(input-input_old) + beta*grad
+            else: ref1 = input - alpha*(input-input_old) + beta*grad
     else:
-        if abs(SolarPower-SolarPowerlist[0]) > 1:
+        if abs(SolarPower-SolarPowerlist[0]) > 3:
             # Threshold for the change of solar power
             PVOptimized = False
             SolarPowerlist = []
-            # SolarRefVList = []
+            SolarRefVList = [ref1]
 
 
 def PIfeedbackControl(Kp, Ki, DeltaT, targetY, refY, control_old, error_old):
@@ -160,9 +160,11 @@ def management():
             # time.sleep(0.1)
         else:
             # time.sleep(0.1)
+            print([ref3,ref0,ref1,ref2])
+            print(OverCharging)
             if not hasCalculatedIniCapacity:
-                SoC1 = findCapacityByVoltage(1.1*sum(BatteryVoltageList1)/len(BatteryVoltageList1)/8)
-                SoC2 = findCapacityByVoltage(1.1*sum(BatteryVoltageList2)/len(BatteryVoltageList2)/8)
+                SoC1 = findCapacityByVoltage(sum(BatteryVoltageList1)/len(BatteryVoltageList1)/8)
+                SoC2 = findCapacityByVoltage(sum(BatteryVoltageList2)/len(BatteryVoltageList2)/8)
                 BatteryVoltageList1=[]
                 BatteryVoltageList2=[]
                 hasCalculatedIniCapacity = True
@@ -170,13 +172,6 @@ def management():
             SoC2 = SoC2 + currents[0] * Period / (6000.0 * 3.6) # Current-time integral for battery charge
             # PV panel Optimizing and Control
             
-            if ref0>2.0:
-                OverCharging = True
-            if voltages[1]>27.6:
-                ref0 = ref0 - 1.0*(voltages[1]-27.6)*Period
-                if voltages[0]>27.6:
-                    OverCharging = True
-
             #batteries auto balancing
             if (SoC1-SoC2)>0.1:
                 if ref0>0: ref3 = ref0*(1+(SoC1-SoC2)*2)
@@ -184,6 +179,7 @@ def management():
             elif (SoC2-SoC1)>0.1:
                 if ref0>0: ref3 = ref0/(1-(SoC1-SoC2)*2)
                 elif ref0<0: ref3 = ref0*(1-(SoC1-SoC2)*2)
+            else: ref3=ref0
 
             if voltages[0]>27.6:
                 ref3 = ref3 - 2.0*(voltages[0]-27.6)*Period
@@ -200,14 +196,14 @@ def management():
                 if ref3<0: ref3=0
                 if SoC2 > 0.3: Battery2Low = False
 
-            if ref3>2.0: ref3=1.9
-            elif ref3<-5.0: ref3=-4.0
+            if ref3>1.0: ref3=0.97
+            elif ref3<-3.0: ref3=-2.9
 
-            if currents[0] < -4:
+            if currents[0] < -3.1:
                 LowPowerCount = 1+LowPowerCount
             else:
                 LowPowerCount = 0
-            if LowPowerCount > 10:
+            if LowPowerCount > 20:
                 ref2 = 0
                 print("Warning: System power supply is insufficient. Please reduce the appliance power.\n")
 
@@ -220,13 +216,13 @@ def management():
                     OptmLoopCount = OptmLoopCount + 1
                 # print("Hello World!\n")
             else:
-                controlData = PIfeedbackControl(-0.3, -1.0, Period, currents[0], ref3, ref1, error)
+                controlData = PIfeedbackControl(-1.0, -3.0, Period, currents[0], ref3, ref1, error)
                 ref1 = controlData.get("control",ref1)
                 error = controlData.get("error",error)
 
             # Battery control
             if not OverCharging:
-                controlData = PIfeedbackControl(-0.2, -1.0, Period, currents[0], ref3, ref0, error)
+                controlData = PIfeedbackControl(-0.4, -2.0, Period, currents[0], ref3, ref0, error)
                 ref0 = controlData.get("control",0)
                 error = controlData.get("error",error)
 
@@ -237,8 +233,15 @@ def management():
                     OptmLoopCount = 1
                     OverCharging = False # Change the charging 
             
-            if ref0>2.0: ref0=1.9
-            elif ref0<-5.0: ref0=-4.5
+            if ref0>1.0:
+                OverCharging = True
+            if voltages[1]>27.6:
+                ref0 = ref0 - 1.0*(voltages[1]-27.6)*Period
+                if voltages[0]>27.6:
+                    OverCharging = True
+
+            if ref0>1.0: ref0=0.98
+            elif ref0<-3.0: ref0=-2.98
             
             if Battery1Low:
                 if ref0<0: ref0=0
@@ -311,6 +314,8 @@ def update_power_data():
                 charge2 = round(sum(Battery2list) / 5, 1)
                 pct1 = round(SoC1 * 100, 1)
                 pct2 = round(SoC2 * 100, 1)
+                if apply >= 5:
+                    print("Appliance ON")
                 # Prepare Data for sending
                 solarlist=[]
                 applylist=[]
